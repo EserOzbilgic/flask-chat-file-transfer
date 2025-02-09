@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="message-box">
+  <h2>Chat Room: {{ code }}</h2>
+  <div class="messages" id="messages"></div>
+  <div class="inputs">
+    <input type="text" rows="3" placeholder="Message" name="message" id="message" />
+    <button type="button" name="send" id="send-btn" onClick="sendMessage()">Send</button>
+    
+    <!-- File upload -->
+    <input type="file" id="fileInput" />
+    <button type="button" onClick="sendFile()">Send File</button>
+
+    <!-- Leave chat button -->
+    <button type="button" id="leave-btn" onClick="leaveRoom()">Leave Chat</button>
+  </div>
+</div>
+
+<script type="text/javascript">
+  var socketio = io();
+  const messages = document.getElementById("messages");
+
+  const createMessage = (name, msg, isFile) => {
+    let content;
+    if (isFile) {
+      content = `
+        <div class="text">
+            <span>
+                <strong>${name}</strong>: <a href="${msg}" target="_blank" rel="noopener noreferrer">Click to view file</a>
+            </span>
+            <span class="muted">${new Date().toLocaleString()}</span>
+        </div>
+      `;
+    } else {
+      content = `
+        <div class="text">
+            <span>
+                <strong>${name}</strong>: ${msg}
+            </span>
+            <span class="muted">${new Date().toLocaleString()}</span>
+        </div>
+      `;
+    }
+    messages.innerHTML += content;
+  };
+
+  document.getElementById("message").addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault(); // Prevent newline in input field
+      sendMessage(); // Call the send function
+    }
+  });
+  
+
+  socketio.on("message", (data) => {
+    createMessage(data.name, data.message, data.is_file);
+  });
+
+  const sendMessage = () => {
+    const message = document.getElementById("message");
+    if (message.value == "") return;
+    socketio.emit("message", { message: message.value });
+    message.value = "";
+  };
+
+  const sendFile = () => {
+    const fileInput = document.getElementById("fileInput");
+    const file = fileInput.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const base64File = e.target.result.split(",")[1];
+        socketio.emit("send_file", {
+          filename: file.name,
+          file_data: base64File
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const leaveRoom = () => {
+    socketio.emit("leave");
+    window.location.href = "/";  // Redirect to home
+  };
+
+  socketio.on("user_left", (data) => {
+    createMessage("System", `${data.name} has left the chat`, false);
+  });
+</script>
+
+{% for msg in messages %}
+<script type="text/javascript">
+  createMessage("{{msg.name}}", "{{msg.message}}", {{ "true" if msg.is_file else "false" }});
+</script>
+{% endfor %}
+{% endblock %}
